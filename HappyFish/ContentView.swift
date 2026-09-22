@@ -1,189 +1,171 @@
 import SwiftUI
-import Combine
+import CoreData
 
-// 0. DEFINIMOS QUÉ ES UN PEZ PRIMERO (Para que Xcode lo conozca)
-struct Pez: Hashable, Equatable {
-    var nombre: String
-    var color: Color
-}
-
-// 1. LA CAJA COMPARTIDA (Lógica de favoritos)
-class GestorFavoritos: ObservableObject {
-    @Published var pecesGuardados: [Pez] = []
-    
-    func alternarFavorito(pez: Pez) {
-        if let index = pecesGuardados.firstIndex(of: pez) {
-            pecesGuardados.remove(at: index)
-        } else {
-            pecesGuardados.append(pez)
-        }
-    }
-}
-
-// 2. EL MENÚ PRINCIPAL
 struct ContentView: View {
-    @StateObject var gestorFavoritos = GestorFavoritos()
-    
+    @Environment(\.managedObjectContext) private var viewContext
+   
+    @FetchRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \PezEntity.nombre, ascending: true)],
+        animation: .default)
+    private var todosLosPeces: FetchedResults<PezEntity>
+   
     var body: some View {
         TabView {
-            PantallaPrincipal()
-                .tabItem {
-                    Label("Inicio", systemImage: "house.fill")
-                }
-            
-            PantallaFavoritos()
-                .tabItem {
-                    Label("Favoritos", systemImage: "heart.fill")
-                }
+            PantallaPrincipal(todosLosPeces: todosLosPeces)
+                .tabItem { Label("Inicio", systemImage: "house.fill") }
+           
+            PantallaFavoritos(todosLosPeces: todosLosPeces)
+                .tabItem { Label("Favoritos", systemImage: "heart.fill") }
         }
         .accentColor(.cyan)
-        .environmentObject(gestorFavoritos)
+        .onAppear {
+            if todosLosPeces.isEmpty {
+                cargarBaseDeDatosInicial()
+            }
+        }
+    }
+   
+    private func cargarBaseDeDatosInicial() {
+        let datosIniciales = [
+            ("Dorado (Mahi-Mahi)", "Golfo de México", "Verde"),
+            ("Lisa Rayada (Mullet)", "Golfo de México", "Verde"),
+            ("Huachinango del Golfo", "Golfo de México", "Amarillo"),
+            ("Marlín Azul del Atlántico", "Golfo de México", "Amarillo"),
+            ("Pez Sierra (Dientes Pequeños)", "Golfo de México", "Rojo"),
+            ("Mero de Nassau", "Golfo de México", "Rojo"),
+            ("Salmón Rojo (Sockeye)", "Alaska", "Verde"),
+            ("Halibut del Pacífico", "Alaska", "Verde"),
+            ("Cangrejo Real (Regulado)", "Alaska", "Amarillo"),
+            ("León Marino (Protegido)", "Alaska", "Rojo"),
+            ("Langosta Americana", "Nueva Inglaterra", "Verde"),
+            ("Vieiras (Scallops)", "Nueva Inglaterra", "Verde"),
+            ("Bacalao del Atlántico", "Nueva Inglaterra", "Rojo"),
+            ("Ballena Franca (Protegida)", "Nueva Inglaterra", "Rojo")
+        ]
+       
+        for dato in datosIniciales {
+            let nuevoPez = PezEntity(context: viewContext)
+            nuevoPez.nombre = dato.0
+            nuevoPez.zona = dato.1
+            nuevoPez.colorSemaforo = dato.2
+            nuevoPez.esFavorito = false
+        }
+        try? viewContext.save()
     }
 }
 
-// 3. PANTALLA DE INICIO
+// PANTALLA PRINCIPAL
 struct PantallaPrincipal: View {
     @State private var textoBusqueda: String = ""
-    
+    var todosLosPeces: FetchedResults<PezEntity>
+   
     var body: some View {
         NavigationView {
             ZStack {
                 LinearGradient(gradient: Gradient(colors: [Color(red: 0.0, green: 0.1, blue: 0.3), Color.blue]), startPoint: .top, endPoint: .bottom).ignoresSafeArea()
-                
+               
                 VStack(alignment: .leading) {
                     Text("Happy Fish =]")
                         .font(.title).bold().padding(.horizontal).padding(.top, 20).foregroundStyle(.white)
-                    
+                        .accessibilityAddTraits(.isHeader)
+                   
                     HStack {
                         Image(systemName: "magnifyingglass").foregroundColor(.gray)
                         TextField("Busca un pescado...", text: $textoBusqueda).font(.body)
                     }
                     .padding().background(Color(.systemGray6)).cornerRadius(20).padding(.horizontal)
-                    
-                    Text("Zonas Pesqueras")
-                        .font(.title2).bold().padding(.horizontal).padding(.top, 20).foregroundStyle(.white)
-                    
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 15) {
-                            NavigationLink(destination: VistaZona(nombreZona: "Alaska")) {
-                                TarjetaCategoria(icono: "mappin.and.ellipse", nombre: "Alaska", color: .blue)
+                    .accessibilityLabel("Barra de búsqueda de especies")
+                   
+                    if textoBusqueda.isEmpty {
+                        Text("Zonas Pesqueras")
+                            .font(.title2).bold().padding(.horizontal).padding(.top, 20).foregroundStyle(.white)
+                       
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 15) {
+                                NavigationLink(destination: VistaZona(nombreZona: "Alaska", peces: todosLosPeces.filter { $0.zona == "Alaska" })) {
+                                    TarjetaCategoria(icono: "mappin.and.ellipse", nombre: "Alaska", color: .blue)
+                                }
+                                NavigationLink(destination: VistaZona(nombreZona: "Golfo de México", peces: todosLosPeces.filter { $0.zona == "Golfo de México" })) {
+                                    TarjetaCategoria(icono: "mappin.and.ellipse", nombre: "Golfo de MX", color: .teal)
+                                }
+                                NavigationLink(destination: VistaZona(nombreZona: "Nueva Inglaterra", peces: todosLosPeces.filter { $0.zona == "Nueva Inglaterra" })) {
+                                    TarjetaCategoria(icono: "mappin.and.ellipse", nombre: "N. Inglaterra", color: .indigo)
+                                }
                             }
-                            NavigationLink(destination: VistaZona(nombreZona: "Golfo de México")) {
-                                TarjetaCategoria(icono: "mappin.and.ellipse", nombre: "Golfo de MX", color: .teal)
-                            }
-                            NavigationLink(destination: VistaZona(nombreZona: "Nueva Inglaterra")) {
-                                TarjetaCategoria(icono: "mappin.and.ellipse", nombre: "N. Inglaterra", color: .indigo)
+                            .padding(.horizontal).padding(.top, 5)
+                        }
+                       
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("¿Cómo funciona el semáforo?")
+                                .font(.headline).foregroundColor(.white).padding(.bottom, 5)
+                            HStack { Circle().fill(Color.green).frame(width: 15, height: 15); Text("Verde: Permitida.").foregroundColor(.white).font(.subheadline) }
+                            HStack { Circle().fill(Color.yellow).frame(width: 15, height: 15); Text("Amarillo: Regulada.").foregroundColor(.white).font(.subheadline) }
+                            HStack { Circle().fill(Color.red).frame(width: 15, height: 15); Text("Rojo: Protegida.").foregroundColor(.white).font(.subheadline) }
+                        }
+                        .padding(.horizontal).padding(.top, 25)
+                        .accessibilityElement(children: .combine)
+                       
+                        Spacer()
+                    } else {
+                        List {
+                            // AQUÍ ORDENAMOS LA BÚSQUEDA POR COLOR
+                            let resultados = todosLosPeces
+                                .filter { $0.nombre?.localizedCaseInsensitiveContains(textoBusqueda) == true }
+                                .sorted { prioridadSemaforo($0.colorSemaforo) < prioridadSemaforo($1.colorSemaforo) }
+                           
+                            if resultados.isEmpty {
+                                Text("No se encontró ningún pez.").foregroundColor(.white).listRowBackground(Color.clear)
+                            } else {
+                                ForEach(resultados, id: \.self) { pez in FilaPez(pez: pez) }
                             }
                         }
-                        .padding(.horizontal).padding(.top, 5)
+                        .scrollContentBackground(.hidden)
                     }
-                    
-                    // Explicación del Semáforo
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("¿Cómo funciona el semáforo?")
-                            .font(.headline).foregroundColor(.white).padding(.bottom, 5)
-                        
-                        HStack {
-                            Circle().fill(Color.green).frame(width: 15, height: 15)
-                            Text("Verde: Pesca permitida y abundante.").foregroundColor(.white).font(.subheadline)
-                        }
-                        HStack {
-                            Circle().fill(Color.yellow).frame(width: 15, height: 15)
-                            Text("Amarillo: Especie regulada (precaución).").foregroundColor(.white).font(.subheadline)
-                        }
-                        HStack {
-                            Circle().fill(Color.red).frame(width: 15, height: 15)
-                            Text("Rojo: Especie protegida o prohibida.").foregroundColor(.white).font(.subheadline)
-                        }
-                    }
-                    .padding(.horizontal).padding(.top, 25)
-                    Spacer()
                 }
             }
         }
     }
 }
 
-// 4. PANTALLA DE ZONA (SEMÁFORO)
+// PANTALLA DE ZONAS
 struct VistaZona: View {
     var nombreZona: String
-    @EnvironmentObject var favoritos: GestorFavoritos
-    
-    var pecesAmostrar: [Pez] {
-        if nombreZona == "Golfo de México" {
-            return [
-                Pez(nombre: "Dorado (Mahi-Mahi)", color: .green),
-                Pez(nombre: "Lisa Rayada (Mullet)", color: .green),
-                Pez(nombre: "Huachinango del Golfo", color: .yellow),
-                Pez(nombre: "Marlín Azul del Atlántico", color: .yellow),
-                Pez(nombre: "Pez Sierra (Dientes Pequeños)", color: .red),
-                Pez(nombre: "Mero de Nassau", color: .red)
-            ]
-        } else {
-            return [Pez(nombre: "Especies no registradas aún", color: .gray)]
-        }
-    }
-    
+    var peces: [PezEntity]
+   
     var body: some View {
         ZStack {
             Color(red: 0.0, green: 0.1, blue: 0.3).ignoresSafeArea()
-            
             VStack {
-                Text("Especies en \(nombreZona)")
-                    .font(.title).bold().foregroundColor(.white).padding(.top, 20)
-                
-                List(pecesAmostrar, id: \.nombre) { pez in
-                    HStack {
-                        Circle().fill(pez.color).frame(width: 20, height: 20)
-                        
-                        Text(pez.nombre).font(.headline).foregroundColor(.white)
-                        
-                        Spacer()
-                        
-                        Button(action: {
-                            favoritos.alternarFavorito(pez: pez)
-                        }) {
-                            Image(systemName: favoritos.pecesGuardados.contains(pez) ? "heart.fill" : "heart")
-                                .foregroundColor(favoritos.pecesGuardados.contains(pez) ? .red : .gray)
-                                .font(.title2)
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                    }
-                    .listRowBackground(Color.blue.opacity(0.3))
-                }
+                Text("Especies en \(nombreZona)").font(.title).bold().foregroundColor(.white).padding(.top, 20)
+               
+                // AQUÍ ORDENAMOS LAS ZONAS POR COLOR
+                let pecesOrdenados = peces.sorted { prioridadSemaforo($0.colorSemaforo) < prioridadSemaforo($1.colorSemaforo) }
+               
+                List(pecesOrdenados, id: \.self) { pez in FilaPez(pez: pez) }
                 .scrollContentBackground(.hidden)
             }
         }
     }
 }
 
-// 5. PANTALLA DE FAVORITOS
+// PANTALLA DE FAVORITOS
 struct PantallaFavoritos: View {
-    @EnvironmentObject var favoritos: GestorFavoritos
-    
+    var todosLosPeces: FetchedResults<PezEntity>
+   
     var body: some View {
         NavigationView {
             ZStack {
                 Color(red: 0.0, green: 0.1, blue: 0.3).ignoresSafeArea()
-                
-                if favoritos.pecesGuardados.isEmpty {
-                    Text("Aún no tienes peces favoritos.")
-                        .foregroundColor(.gray)
+               
+                // AQUÍ ORDENAMOS LOS FAVORITOS POR COLOR
+                let favoritos = todosLosPeces
+                    .filter { $0.esFavorito }
+                    .sorted { prioridadSemaforo($0.colorSemaforo) < prioridadSemaforo($1.colorSemaforo) }
+               
+                if favoritos.isEmpty {
+                    Text("Aún no tienes peces favoritos.").foregroundColor(.gray)
                 } else {
-                    List(favoritos.pecesGuardados, id: \.nombre) { pez in
-                        HStack {
-                            Circle().fill(pez.color).frame(width: 15, height: 15)
-                            Text(pez.nombre).font(.headline).foregroundColor(.white)
-                            Spacer()
-                            Button(action: {
-                                favoritos.alternarFavorito(pez: pez)
-                            }) {
-                                Image(systemName: "heart.fill").foregroundColor(.red)
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                        }
-                        .listRowBackground(Color.blue.opacity(0.3))
-                    }
+                    List(favoritos, id: \.self) { pez in FilaPez(pez: pez) }
                     .scrollContentBackground(.hidden)
                 }
             }
@@ -193,7 +175,7 @@ struct PantallaFavoritos: View {
     }
 }
 
-// 6. COMPONENTE DE TARJETA
+// COMPONENTES REUTILIZABLES
 struct TarjetaCategoria: View {
     var icono: String; var nombre: String; var color: Color
     var body: some View {
@@ -205,6 +187,44 @@ struct TarjetaCategoria: View {
     }
 }
 
-#Preview {
-    ContentView()
+struct FilaPez: View {
+    @ObservedObject var pez: PezEntity
+    @Environment(\.managedObjectContext) private var viewContext
+   
+    var body: some View {
+        HStack {
+            Circle().fill(colorPara(pez.colorSemaforo ?? "")).frame(width: 20, height: 20)
+            Text(pez.nombre ?? "").font(.headline).foregroundColor(.white)
+            Spacer()
+            Button(action: {
+                pez.esFavorito.toggle()
+                try? viewContext.save()
+            }) {
+                Image(systemName: pez.esFavorito ? "heart.fill" : "heart")
+                    .foregroundColor(pez.esFavorito ? .red : .gray).font(.title2)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityLabel(pez.esFavorito ? "Quitar de favoritos" : "Añadir a favoritos")
+        }
+        .listRowBackground(Color.blue.opacity(0.3))
+    }
+   
+    func colorPara(_ colorTexto: String) -> Color {
+        switch colorTexto {
+        case "Verde": return .green
+        case "Amarillo": return .yellow
+        case "Rojo": return .red
+        default: return .gray
+        }
+    }
+}
+
+// LÓGICA DE ORDENAMIENTO (Asignamos un número a cada color)
+func prioridadSemaforo(_ colorTexto: String?) -> Int {
+    switch colorTexto {
+    case "Verde": return 1
+    case "Amarillo": return 2
+    case "Rojo": return 3
+    default: return 4
+    }
 }
