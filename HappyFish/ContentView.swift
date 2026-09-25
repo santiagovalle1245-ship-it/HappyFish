@@ -1,32 +1,39 @@
 import SwiftUI
 import CoreData
+import UIKit
 
+//VISTA PRINCIPAL
 struct ContentView: View {
     @Environment(\.managedObjectContext) private var viewContext
-   
+    @AppStorage("modoOscuro") private var modoOscuro = false
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \PezEntity.nombre, ascending: true)],
         animation: .default)
     private var todosLosPeces: FetchedResults<PezEntity>
-   
+    
     var body: some View {
         TabView {
             PantallaPrincipal(todosLosPeces: todosLosPeces)
                 .tabItem { Label("Inicio", systemImage: "house.fill") }
-           
-            PantallaFavoritos(todosLosPeces: todosLosPeces)
+            
+            PantallaFavoritos()
                 .tabItem { Label("Favoritos", systemImage: "heart.fill") }
+            
+            PantallaEducacion()
+                .tabItem { Label("Educación", systemImage: "book.fill") }
+            
+            PantallaAjustes()
+                .tabItem { Label("Ajustes", systemImage: "gearshape.fill") }
         }
         .accentColor(.cyan)
+        .preferredColorScheme(modoOscuro ? .dark : .light)
         .onAppear {
-            if todosLosPeces.isEmpty {
-                cargarBaseDeDatosInicial()
-            }
+            if todosLosPeces.isEmpty { cargarBaseDeDatosInicial() }
         }
     }
-   
+    
     private func cargarBaseDeDatosInicial() {
-        let datosIniciales = [
+        let datosIniciales: [(String, String, String)] = [
             ("Dorado (Mahi-Mahi)", "Golfo de México", "Verde"),
             ("Lisa Rayada (Mullet)", "Golfo de México", "Verde"),
             ("Huachinango del Golfo", "Golfo de México", "Amarillo"),
@@ -42,7 +49,7 @@ struct ContentView: View {
             ("Bacalao del Atlántico", "Nueva Inglaterra", "Rojo"),
             ("Ballena Franca (Protegida)", "Nueva Inglaterra", "Rojo")
         ]
-       
+        
         for dato in datosIniciales {
             let nuevoPez = PezEntity(context: viewContext)
             nuevoPez.nombre = dato.0
@@ -54,32 +61,45 @@ struct ContentView: View {
     }
 }
 
-// PANTALLA PRINCIPAL
+// Fondo dinamico
+struct FondoMarino: View {
+    @AppStorage("modoOscuro") private var modoOscuro = false
+    
+    var body: some View {
+        
+        let coloresOscuros = [Color.black, Color(red: 0.0, green: 0.1, blue: 0.3)]
+        let coloresClaros = [Color(red: 0.0, green: 0.3, blue: 0.6), Color.blue]
+        let gradiente = Gradient(colors: modoOscuro ? coloresOscuros : coloresClaros)
+        
+        LinearGradient(gradient: gradiente, startPoint: .top, endPoint: .bottom)
+            .ignoresSafeArea()
+    }
+}
+
+// PANTALLA 1: INICIO
 struct PantallaPrincipal: View {
     @State private var textoBusqueda: String = ""
     var todosLosPeces: FetchedResults<PezEntity>
-   
     var body: some View {
         NavigationView {
             ZStack {
-                LinearGradient(gradient: Gradient(colors: [Color(red: 0.0, green: 0.1, blue: 0.3), Color.blue]), startPoint: .top, endPoint: .bottom).ignoresSafeArea()
-               
+                FondoMarino()
+                
                 VStack(alignment: .leading) {
                     Text("Happy Fish =]")
-                        .font(.title).bold().padding(.horizontal).padding(.top, 20).foregroundStyle(.white)
+                        .font(.title).bold().padding(.horizontal).padding(.top, 20).foregroundColor(.white)
                         .accessibilityAddTraits(.isHeader)
-                   
+                    
                     HStack {
                         Image(systemName: "magnifyingglass").foregroundColor(.gray)
                         TextField("Busca un pescado...", text: $textoBusqueda).font(.body)
                     }
                     .padding().background(Color(.systemGray6)).cornerRadius(20).padding(.horizontal)
-                    .accessibilityLabel("Barra de búsqueda de especies")
-                   
+                    
                     if textoBusqueda.isEmpty {
                         Text("Zonas Pesqueras")
-                            .font(.title2).bold().padding(.horizontal).padding(.top, 20).foregroundStyle(.white)
-                       
+                            .font(.title2).bold().padding(.horizontal).padding(.top, 20).foregroundColor(.white)
+                        
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 15) {
                                 NavigationLink(destination: VistaZona(nombreZona: "Alaska", peces: todosLosPeces.filter { $0.zona == "Alaska" })) {
@@ -94,7 +114,7 @@ struct PantallaPrincipal: View {
                             }
                             .padding(.horizontal).padding(.top, 5)
                         }
-                       
+                        
                         VStack(alignment: .leading, spacing: 12) {
                             Text("¿Cómo funciona el semáforo?")
                                 .font(.headline).foregroundColor(.white).padding(.bottom, 5)
@@ -104,15 +124,14 @@ struct PantallaPrincipal: View {
                         }
                         .padding(.horizontal).padding(.top, 25)
                         .accessibilityElement(children: .combine)
-                       
+                        
                         Spacer()
                     } else {
                         List {
-                            // AQUÍ ORDENAMOS LA BÚSQUEDA POR COLOR
                             let resultados = todosLosPeces
                                 .filter { $0.nombre?.localizedCaseInsensitiveContains(textoBusqueda) == true }
                                 .sorted { prioridadSemaforo($0.colorSemaforo) < prioridadSemaforo($1.colorSemaforo) }
-                           
+                            
                             if resultados.isEmpty {
                                 Text("No se encontró ningún pez.").foregroundColor(.white).listRowBackground(Color.clear)
                             } else {
@@ -127,20 +146,18 @@ struct PantallaPrincipal: View {
     }
 }
 
-// PANTALLA DE ZONAS
+// PANTALLA 2: ZONAS
 struct VistaZona: View {
     var nombreZona: String
     var peces: [PezEntity]
-   
+    
     var body: some View {
         ZStack {
-            Color(red: 0.0, green: 0.1, blue: 0.3).ignoresSafeArea()
+            FondoMarino()
             VStack {
                 Text("Especies en \(nombreZona)").font(.title).bold().foregroundColor(.white).padding(.top, 20)
-               
-                // AQUÍ ORDENAMOS LAS ZONAS POR COLOR
+                
                 let pecesOrdenados = peces.sorted { prioridadSemaforo($0.colorSemaforo) < prioridadSemaforo($1.colorSemaforo) }
-               
                 List(pecesOrdenados, id: \.self) { pez in FilaPez(pez: pez) }
                 .scrollContentBackground(.hidden)
             }
@@ -148,34 +165,109 @@ struct VistaZona: View {
     }
 }
 
-// PANTALLA DE FAVORITOS
+// PANTALLA 3: FAVORITOS
 struct PantallaFavoritos: View {
-    var todosLosPeces: FetchedResults<PezEntity>
-   
+    @FetchRequest(
+        entity: PezEntity.entity(),
+        sortDescriptors: [NSSortDescriptor(keyPath: \PezEntity.nombre, ascending: true)],
+        predicate: NSPredicate(format: "esFavorito == true"),
+        animation: .default)
+    private var pecesFavoritos: FetchedResults<PezEntity>
+    
     var body: some View {
         NavigationView {
             ZStack {
-                Color(red: 0.0, green: 0.1, blue: 0.3).ignoresSafeArea()
-               
-                // AQUÍ ORDENAMOS LOS FAVORITOS POR COLOR
-                let favoritos = todosLosPeces
-                    .filter { $0.esFavorito }
-                    .sorted { prioridadSemaforo($0.colorSemaforo) < prioridadSemaforo($1.colorSemaforo) }
-               
-                if favoritos.isEmpty {
-                    Text("Aún no tienes peces favoritos.").foregroundColor(.gray)
+                FondoMarino()
+                
+                let favoritosOrdenados = pecesFavoritos.sorted { prioridadSemaforo($0.colorSemaforo) < prioridadSemaforo($1.colorSemaforo) }
+                
+                if favoritosOrdenados.isEmpty {
+                    Text("Aún no tienes peces favoritos.").foregroundColor(.white).opacity(0.8)
                 } else {
-                    List(favoritos, id: \.self) { pez in FilaPez(pez: pez) }
+                    List(favoritosOrdenados, id: \.self) { pez in
+                        FilaPez(pez: pez)
+                    }
                     .scrollContentBackground(.hidden)
                 }
             }
             .navigationTitle("Mis Favoritos")
-            .toolbarColorScheme(.dark, for: .navigationBar)
         }
     }
 }
 
-// COMPONENTES REUTILIZABLES
+// PANTALLA 4: EDUCACIÓN
+struct PantallaEducacion: View {
+    var body: some View {
+        NavigationView {
+            ZStack {
+                FondoMarino()
+                
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        Text("Misión ODS 14").font(.largeTitle).bold().foregroundColor(.white)
+                        Text("Vida Submarina").font(.title2).foregroundColor(.cyan)
+                        
+                        VStack(alignment: .leading, spacing: 15) {
+                            TarjetaInfo(titulo: "¿Sabías qué?", texto: "Los océanos absorben alrededor del 30% del dióxido de carbono producido por los humanos.", icono: "globe.americas.fill")
+                            TarjetaInfo(titulo: "Pesca Sostenible", texto: "Respetar las vedas permite que las especies marinas se reproduzcan.", icono: "exclamationmark.triangle.fill")
+                            TarjetaInfo(titulo: "Tu Impacto", texto: "Al usar Happy Fish =], ayudas a promover prácticas responsables.", icono: "hand.thumbsup.fill")
+                        }
+                    }
+                    .padding()
+                }
+            }
+            .navigationBarHidden(true)
+        }
+    }
+}
+
+// PANTALLA 5: AJUSTES
+struct PantallaAjustes: View {
+    @AppStorage("modoOscuro") private var modoOscuro = false
+    @AppStorage("vibracionActivada") private var vibracionActivada = true
+    @State private var mostrarAlertaBorrado = false
+    @Environment(\.managedObjectContext) private var viewContext
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("Apariencia y Accesibilidad")) {
+                    Toggle(isOn: $modoOscuro) { Label("Modo Oscuro Fijo", systemImage: "moon.fill") }
+                        .onChange(of: modoOscuro) { generarVibracion() }
+                }
+                Section(header: Text("Preferencias de la App")) {
+                    Toggle(isOn: $vibracionActivada) { Label("Vibración al tocar botones", systemImage: "iphone.radiowaves.left.and.right") }
+                        .onChange(of: vibracionActivada) { generarVibracion() }
+                }
+                Section(header: Text("Gestión de Datos")) {
+                    Button(role: .destructive, action: { mostrarAlertaBorrado = true; generarVibracion() }) {
+                        Label("Quitar todos mis Favoritos", systemImage: "trash.fill")
+                    }
+                    .alert("¿Estás seguro?", isPresented: $mostrarAlertaBorrado) {
+                        Button("Cancelar", role: .cancel) { }
+                        Button("Borrar Todo", role: .destructive) { borrarTodosLosFavoritos() }
+                    }
+                }
+            }
+            .navigationTitle("Ajustes")
+        }
+    }
+    
+    private func generarVibracion() {
+        if vibracionActivada { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
+    }
+    private func borrarTodosLosFavoritos() {
+        let request = NSFetchRequest<PezEntity>(entityName: "PezEntity")
+        request.predicate = NSPredicate(format: "esFavorito == true")
+        if let favoritos = try? viewContext.fetch(request) {
+            for pez in favoritos { pez.esFavorito = false }
+            try? viewContext.save()
+            generarVibracion()
+        }
+    }
+}
+
+// COMPONENTES
 struct TarjetaCategoria: View {
     var icono: String; var nombre: String; var color: Color
     var body: some View {
@@ -187,10 +279,27 @@ struct TarjetaCategoria: View {
     }
 }
 
+struct TarjetaInfo: View {
+    var titulo: String; var texto: String; var icono: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Image(systemName: icono).foregroundColor(.cyan).font(.title2)
+                Text(titulo).font(.headline).foregroundColor(.white)
+            }
+            Text(texto).font(.body).foregroundColor(.white).opacity(0.9)
+        }
+        .padding()
+        .background(Color.black.opacity(0.2))
+        .cornerRadius(15)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 struct FilaPez: View {
     @ObservedObject var pez: PezEntity
     @Environment(\.managedObjectContext) private var viewContext
-   
+    
     var body: some View {
         HStack {
             Circle().fill(colorPara(pez.colorSemaforo ?? "")).frame(width: 20, height: 20)
@@ -204,11 +313,10 @@ struct FilaPez: View {
                     .foregroundColor(pez.esFavorito ? .red : .gray).font(.title2)
             }
             .buttonStyle(PlainButtonStyle())
-            .accessibilityLabel(pez.esFavorito ? "Quitar de favoritos" : "Añadir a favoritos")
         }
-        .listRowBackground(Color.blue.opacity(0.3))
+        .listRowBackground(Color.black.opacity(0.2))
     }
-   
+    
     func colorPara(_ colorTexto: String) -> Color {
         switch colorTexto {
         case "Verde": return .green
@@ -219,7 +327,6 @@ struct FilaPez: View {
     }
 }
 
-// LÓGICA DE ORDENAMIENTO (Asignamos un número a cada color)
 func prioridadSemaforo(_ colorTexto: String?) -> Int {
     switch colorTexto {
     case "Verde": return 1
@@ -227,4 +334,9 @@ func prioridadSemaforo(_ colorTexto: String?) -> Int {
     case "Rojo": return 3
     default: return 4
     }
+}
+
+#Preview {
+    ContentView()
+        .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
 }
